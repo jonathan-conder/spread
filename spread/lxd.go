@@ -111,6 +111,11 @@ func (p *lxdProvider) Allocate(ctx context.Context, system *System) (Server, err
 	if !p.options.Reuse {
 		args = append(args, "--ephemeral")
 	}
+	args = append(args, "--vm")
+	args = append(args, "-c")
+	args = append(args, "limits.cpu=8")
+	args = append(args, "-c")
+	args = append(args, "limits.memory=8GB")
 	output, err := exec.Command("lxc", args...).CombinedOutput()
 	if err != nil {
 		err = outputErr(output, err)
