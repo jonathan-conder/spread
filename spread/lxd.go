@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -14,6 +13,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"gopkg.in/yaml.v2"
 
 	"golang.org/x/net/context"
 )
@@ -111,6 +112,10 @@ func (p *lxdProvider) Allocate(ctx context.Context, system *System) (Server, err
 	if !p.options.Reuse {
 		args = append(args, "--ephemeral")
 	}
+	args = append(args, "-c")
+	args = append(args, "security.nesting=true")
+	args = append(args, "-c")
+	args = append(args, "security.privileged=true")
 	output, err := exec.Command("lxc", args...).CombinedOutput()
 	if err != nil {
 		err = outputErr(output, err)
@@ -443,9 +448,15 @@ func (p *lxdProvider) address(name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	for _, addr := range sjson.State.Network["eth0"].Addresses {
-		if addr.Family == "inet" && addr.Address != "" {
-			return addr.Address, nil
+	for intf, network := range sjson.State.Network {
+		if intf == "lo" {
+			continue
+		}
+		for _, addr := range network.Addresses {
+			debugf("considering interface %v\n", intf)
+			if addr.Family == "inet" && addr.Address != "" {
+				return addr.Address, nil
+			}
 		}
 	}
 	return "", &lxdNoAddrError{name}
@@ -470,18 +481,19 @@ func (p *lxdProvider) serverJSON(name string) (*lxdServerJSON, error) {
 
 	debugf("lxd list output: %# v\n", sjsons)
 
-	if len(sjsons) == 0 {
-		return nil, &lxdNoServerError{name}
+	for _, server := range sjsons {
+		if server.Name == name {
+			return server, nil
+		}
 	}
-	if sjsons[0].Name != name {
-		return nil, fmt.Errorf("lxd returned invalid JSON listing for %q: %s", name, outputErr(output, nil))
-	}
-	return sjsons[0], nil
+	return nil, &lxdNoServerError{name}
 }
 
 func (p *lxdProvider) tuneSSH(name string) error {
 	cmds := [][]string{
 		{"sed", "-i", `s/^\s*#\?\s*\(PermitRootLogin\|PasswordAuthentication\)\>.*/\1 yes/`, "/etc/ssh/sshd_config"},
+		{"/bin/bash", "-c", `sed -i 's/^\s*\(PermitRootLogin\|PasswordAuthentication\)\>.*/# COMMENTED OUT BY SPREAD: \0/' /etc/ssh/sshd_config.d/* || true`},
+		{"/bin/bash", "-c", `test -d /etc/ssh/sshd_config.d && echo -e 'PermitRootLogin=yes\nPasswordAuthentication=yes' > /etc/ssh/sshd_config.d/00-spread.conf`},
 		{"/bin/bash", "-c", fmt.Sprintf("echo root:'%s' | chpasswd", p.options.Password)},
 		{"killall", "-HUP", "sshd"},
 	}
