@@ -112,6 +112,10 @@ func (p *lxdProvider) Allocate(ctx context.Context, system *System) (Server, err
 	if !p.options.Reuse {
 		args = append(args, "--ephemeral")
 	}
+	args = append(args, "-c")
+	args = append(args, "security.nesting=true")
+	args = append(args, "-c")
+	args = append(args, "security.privileged=true")
 	output, err := exec.Command("lxc", args...).CombinedOutput()
 	if err != nil {
 		err = outputErr(output, err)
