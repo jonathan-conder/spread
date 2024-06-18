@@ -116,6 +116,8 @@ func (p *lxdProvider) Allocate(ctx context.Context, system *System) (Server, err
 	args = append(args, "limits.cpu=8")
 	args = append(args, "-c")
 	args = append(args, "limits.memory=8GB")
+	args = append(args, "-d")
+	args = append(args, "root,size=15GiB")
 	output, err := exec.Command("lxc", args...).CombinedOutput()
 	if err != nil {
 		err = outputErr(output, err)
