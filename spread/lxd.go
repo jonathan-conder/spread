@@ -116,8 +116,11 @@ func (p *lxdProvider) Allocate(ctx context.Context, system *System) (Server, err
 	args = append(args, "limits.cpu=2")
 	args = append(args, "-c")
 	args = append(args, "limits.memory=8GB")
+	args = append(args, "-c")
+	args = append(args, "security.secureboot=false")
+	// workaround LXD issue: https://discuss.linuxcontainers.org/t/lxd-vm-how-to-set-disk-size/7566
 	args = append(args, "-d")
-	args = append(args, "root,size=15GiB")
+	args = append(args, "root,size=20GiB")
 	output, err := exec.Command("lxc", args...).CombinedOutput()
 	if err != nil {
 		err = outputErr(output, err)
@@ -136,7 +139,9 @@ func (p *lxdProvider) Allocate(ctx context.Context, system *System) (Server, err
 	}
 
 	printf("Waiting for lxd container %s to have an address...", name)
-	timeout := time.After(60 * time.Second)
+	// It takes over 1 minute to allocate an IP address in a GitHub self-hosted
+	// runner sometimes. Hence, set it equal to the qemu's backend timeout.
+	timeout := time.After(5 * time.Minute)
 	retry := time.NewTicker(1 * time.Second)
 	defer retry.Stop()
 	for {
