@@ -114,7 +114,7 @@ func (p *lxdProvider) Allocate(ctx context.Context, system *System) (Server, err
 	}
 	args = append(args, "--vm")
 	args = append(args, "-c")
-	args = append(args, "limits.cpu=8")
+	args = append(args, "limits.cpu=2")
 	args = append(args, "-c")
 	args = append(args, "limits.memory=8GB")
 	args = append(args, "-d")
