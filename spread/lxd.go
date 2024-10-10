@@ -245,6 +245,7 @@ type lxdImageInfo struct {
 	Source struct {
 		Server string `yaml:"Server"`
 	} `yaml:"Source"`
+	Type string `yaml:"type"`
 }
 
 var errNoImage = fmt.Errorf("image not found")
@@ -347,6 +348,9 @@ NextImage:
 		aliases := strings.Split(props.Aliases, ",")
 
 		if info.Source.Server != "" && remoteNames[info.Source.Server] != remote {
+			continue
+		}
+		if info.Type != "virtual-machine" {
 			continue
 		}
 		// This is a hack. Unfortunatley exported+imported images lose their remote.
