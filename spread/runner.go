@@ -916,7 +916,7 @@ Allocate:
 
 	printf("Connecting to %s...", server)
 
-	timeout = time.After(1 * time.Minute)
+	timeout = time.After(10 * time.Minute)
 	relog = time.NewTicker(8 * time.Second)
 	defer relog.Stop()
 	retry = time.NewTicker(5 * time.Second)
