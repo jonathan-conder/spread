@@ -11,7 +11,10 @@ import (
 	"golang.org/x/net/context"
 )
 
-var ovmfDefaultPath = "/usr/share/OVMF/OVMF_CODE.fd"
+var ovmfDefaultPaths = map[string]string{
+	"x86_64": "/usr/share/OVMF/OVMF_CODE.fd",
+	"aarch64": "/usr/share/AAVMF/AAVMF_CODE.fd",
+}
 
 func QEMU(p *Project, b *Backend, o *Options) Provider {
 	return &qemuProvider{p, b, o}
@@ -100,33 +103,48 @@ func systemPath(system *System) string {
 	return os.ExpandEnv("$HOME/.spread/qemu/" + system.Image + ".img")
 }
 
-func biosPath(biosName string) (string, error) {
-	bios := os.ExpandEnv("$HOME/.spread/qemu/bios/" + biosName + ".img")
-	if info, err := os.Stat(bios); err == nil && info.Mode().IsRegular() {
-		debugf("using local bios file: %v", bios)
-		return bios, nil
+func biosPath(biosName, arch string) (string, error) {
+	names := []string{
+		fmt.Sprintf("%s-%s", biosName, arch),
+		biosName,
 	}
 
-	if p := os.Getenv("SPREAD_QEMU_FALLBACK_BIOS_PATH"); p != "" {
-		fallbackBios := os.ExpandEnv(filepath.Join(p, biosName+".img"))
-		debugf("using fallback bios file: %v", fallbackBios)
-		return fallbackBios, nil
+	for _, name := range names {
+		bios := os.ExpandEnv("$HOME/.spread/qemu/bios/" + name + ".img")
+		if info, err := os.Stat(bios); err == nil && info.Mode().IsRegular() {
+			debugf("using local bios file: %v", bios)
+			return bios, nil
+		}
+
+		if p := os.Getenv("SPREAD_QEMU_FALLBACK_BIOS_PATH"); p != "" {
+			fallbackBios := os.ExpandEnv(filepath.Join(p, name+".img"))
+			debugf("using fallback bios file: %v", fallbackBios)
+			return fallbackBios, nil
+		}
 	}
 
 	switch biosName {
 	case "uefi":
-		return ovmfDefaultPath, nil
+		path, ok := ovmfDefaultPaths[arch]
+		if ok {
+			return path, nil
+		}
 	}
 
 	return "", fmt.Errorf("cannot find bios path for %q", biosName)
 }
 
 func qemuCmd(system *System, path string, mem, port int) (*exec.Cmd, error) {
+	arch := system.Arch
+	if arch == "" {
+		// TODO: detect from host
+		arch = "x86_64"
+	}
+	qemuSystem := fmt.Sprintf("qemu-system-%s", arch)
 	serial := fmt.Sprintf("telnet:127.0.0.1:%d,server,nowait", port+100)
 	monitor := fmt.Sprintf("telnet:127.0.0.1:%d,server,nowait", port+200)
 	fwd := fmt.Sprintf("user,hostfwd=tcp:127.0.0.1:%d-:22", port)
-	cmd := exec.Command("qemu-system-x86_64",
-		"-enable-kvm",
+	cmd := exec.Command(qemuSystem,
 		"-snapshot",
 		"-m", strconv.Itoa(mem),
 		"-net", "nic",
@@ -134,6 +152,15 @@ func qemuCmd(system *System, path string, mem, port int) (*exec.Cmd, error) {
 		"-serial", serial,
 		"-monitor", monitor,
 		path)
+	// TODO: if arch == host arch
+	if arch == "x86_64" {
+		cmd.Args = append([]string{cmd.Args[0], "-enable-kvm"}, cmd.Args[1:]...)
+	} else {
+		cmd.Args = append([]string{cmd.Args[0], "-machine", "virt"}, cmd.Args[1:]...)
+	}
+	if system.CPUFamily != "" {
+		cmd.Args = append([]string{cmd.Args[0], "-cpu", system.CPUFamily}, cmd.Args[1:]...)
+	}
 	if os.Getenv("SPREAD_QEMU_GUI") != "1" {
 		cmd.Args = append([]string{cmd.Args[0], "-nographic"}, cmd.Args[1:]...)
 	}
@@ -142,7 +169,7 @@ func qemuCmd(system *System, path string, mem, port int) (*exec.Cmd, error) {
 	case "":
 		// nothing to do, that is the qemu default
 	case "uefi":
-		biosPath, err := biosPath(system.Bios)
+		biosPath, err := biosPath(system.Bios, system.Arch)
 		if err != nil {
 			return nil, err
 		}

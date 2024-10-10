@@ -127,6 +127,8 @@ type System struct {
 
 	// Supported are {"uefi",""}, only for qemu so far.
 	Bios string
+	// Default is x86_64, only for qemu so far.
+	Arch string
 	// Request a specific CPU family, e.g. "Intel Skylake" The
 	// exact string is backend specific.
 	CPUFamily string `yaml:"cpu-family"`
