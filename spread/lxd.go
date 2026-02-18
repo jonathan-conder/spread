@@ -116,8 +116,6 @@ func (p *lxdProvider) Allocate(ctx context.Context, system *System) (Server, err
 	args = append(args, "limits.cpu=2")
 	args = append(args, "-c")
 	args = append(args, "limits.memory=8GB")
-	args = append(args, "-c")
-	args = append(args, "security.secureboot=false")
 	// workaround LXD issue: https://discuss.linuxcontainers.org/t/lxd-vm-how-to-set-disk-size/7566
 	args = append(args, "-d")
 	args = append(args, "root,size=20GiB")
