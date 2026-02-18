@@ -494,14 +494,6 @@ func (p *linodeProvider) boot(s *linodeServer, configID int) (*linodeSimpleJob, 
 	})
 }
 
-func (p *linodeProvider) reboot(s *linodeServer, configID int) (*linodeSimpleJob, error) {
-	return p.simpleJob(s, "reboot", linodeParams{
-		"api_action": "linode.reboot",
-		"LinodeID":   s.d.ID,
-		"ConfigID":   configID,
-	})
-}
-
 func (p *linodeProvider) shutdown(s *linodeServer) (*linodeSimpleJob, error) {
 	return p.simpleJob(s, "shutdown", linodeParams{
 		"api_action": "linode.shutdown",
@@ -1036,14 +1028,6 @@ type linodeJob struct {
 	HostSuccess interface{} `json:"HOST_SUCCESS"`
 }
 
-func (job *linodeJob) Entered() time.Time {
-	return parseLinodeDT(job.EnteredDT)
-}
-
-func (job *linodeJob) HostStarted() time.Time {
-	return parseLinodeDT(job.HostStartDT)
-}
-
 func (job *linodeJob) HostFinished() time.Time {
 	return parseLinodeDT(job.HostFinishDT)
 }
@@ -1127,7 +1111,6 @@ func (p *linodeProvider) waitJob(s *linodeServer, verb string, jobID int) (*lino
 			}
 		}
 	}
-	panic("unreachable")
 }
 
 func (p *linodeProvider) hasActiveJob(s *linodeServer, action string, flags doFlags) (found bool, err error) {

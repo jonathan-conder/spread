@@ -127,11 +127,6 @@ func (r *Runner) reusePath() string {
 	return filepath.Join(r.project.Path, fmt.Sprintf(".spread-reuse.%d.yaml", os.Getpid()))
 }
 
-type projectContent struct {
-	fd  *os.File
-	err error
-}
-
 func (r *Runner) Wait() error {
 	return r.tomb.Wait()
 }
@@ -657,13 +652,11 @@ func (r *Runner) worker(backend *Backend, system *System, order []int) {
 		if !r.run(client, last, restoring, backend, backend.Restore, backend.Debug, &abend) {
 			r.add(&stats.BackendRestoreError, last)
 		}
-		insideBackend = false
 	}
 	if !abend && insideProject {
 		if !r.run(client, last, restoring, r.project, r.project.Restore, r.project.Debug, &abend) {
 			r.add(&stats.ProjectRestoreError, last)
 		}
-		insideProject = false
 	}
 	server := client.Server()
 	client.Close()

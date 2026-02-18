@@ -383,7 +383,6 @@ func (p *openstackProvider) waitProvision(ctx context.Context, s *openstackServe
 			return fmt.Errorf("cannot wait for %s to provision: interrupted", s)
 		}
 	}
-	panic("unreachable")
 }
 
 var openstackServerBootTimeout = 2 * time.Minute

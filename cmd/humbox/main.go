@@ -37,10 +37,6 @@ var httpServer = &http.Server{
 	WriteTimeout: 30 * time.Second,
 }
 
-var httpClient = &http.Client{
-	Timeout: 10 * time.Second,
-}
-
 var manager *Manager
 
 func main() {

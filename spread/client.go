@@ -125,8 +125,6 @@ func (c *Client) dialOnReboot(prevBootID string) error {
 		case <-retry.C:
 		}
 	}
-
-	return nil
 }
 
 func (c *Client) Close() error {
@@ -163,69 +161,6 @@ func (c *Client) SetKillTimeout(timeout time.Duration) {
 		// So message from kill won't race with warning.
 		c.killTimeout -= 1 * time.Second
 	}
-}
-
-func (c *Client) WriteFile(path string, data []byte) error {
-	session, err := c.sshc.NewSession()
-	if err != nil {
-		return err
-	}
-	defer session.Close()
-
-	stdin, err := session.StdinPipe()
-	if err != nil {
-		return err
-	}
-	defer stdin.Close()
-
-	errch := make(chan error, 2)
-	go func() {
-		_, err := stdin.Write(data)
-		if err != nil {
-			errch <- err
-		}
-		errch <- stdin.Close()
-	}()
-
-	debugf("Writing to %s on %s:\n-----\n%# v\n-----", path, c.job, string(data))
-
-	var stderr safeBuffer
-	session.Stderr = &stderr
-	cmd := fmt.Sprintf(`%s/bin/bash -c "cat >'%s'"`, c.sudo(), path)
-	err = c.runCommand(session, cmd, nil, &stderr)
-	if err != nil {
-		err = outputErr(stderr.Bytes(), err)
-		return fmt.Errorf("cannot write to %s on %s: %v", path, c.job, err)
-	}
-
-	if err := <-errch; err != nil {
-		printf("Error writing to %s on %s: %v", path, c.job, err)
-	}
-	return nil
-}
-
-func (c *Client) ReadFile(path string) ([]byte, error) {
-	session, err := c.sshc.NewSession()
-	if err != nil {
-		return nil, err
-	}
-	defer session.Close()
-
-	debugf("Reading from %s on %s...", path, c.job)
-
-	var stdout, stderr safeBuffer
-	session.Stdout = &stdout
-	session.Stderr = &stderr
-	cmd := fmt.Sprintf(`%scat "%s"`, c.sudo(), path)
-	err = c.runCommand(session, cmd, nil, &stderr)
-	if err != nil {
-		err = outputErr(stderr.Bytes(), err)
-		logf("Cannot read from %s on %s: %v", path, c.job, err)
-		return nil, fmt.Errorf("cannot read from %s on %s: %v", path, c.job, err)
-	}
-	output := stdout.Bytes()
-	debugf("Got data from %s on %s:\n-----\n%# v\n-----", path, c.job, string(output))
-	return output, nil
 }
 
 type outputMode int
@@ -301,7 +236,6 @@ func (c *Client) run(script string, dir string, env *Environment, mode outputMod
 			return nil, err
 		}
 	}
-	panic("unreachable")
 }
 
 func (c *Client) getBootID() (string, error) {
@@ -510,27 +444,6 @@ func (c *Client) RemoveAll(path string) error {
 	return err
 }
 
-func (c *Client) SetupRootAccess(password string) error {
-	var script string
-	if c.config.User == "root" {
-		script = fmt.Sprintf(`echo root:'%s' | chpasswd`, password)
-	} else {
-		script = strings.Join([]string{
-			`sudo sed -i 's/^\s*#\?\s*\(PermitRootLogin\|PasswordAuthentication\)\>.*/\1 yes/' /etc/ssh/sshd_config`,
-			`echo root:'` + password + `' | sudo chpasswd`,
-			`sudo pkill -o -HUP sshd || true`,
-		}, "\n")
-	}
-	_, err := c.CombinedOutput(script, "", nil)
-	if err != nil {
-		return fmt.Errorf("cannot setup root access: %s", err)
-	}
-	if c.config.User == "root" {
-		c.config.Auth = []ssh.AuthMethod{ssh.Password(password)}
-	}
-	return nil
-}
-
 func (c *Client) MissingOrEmpty(dir string) (bool, error) {
 	output, err := c.Output(fmt.Sprintf(`! test -e "%s" || ls -a "%s"`, dir, dir), "", nil)
 	if err != nil {
@@ -546,67 +459,6 @@ func (c *Client) MissingOrEmpty(dir string) (bool, error) {
 		}
 	}
 	return true, nil
-}
-
-func (c *Client) Send(from, to string, include, exclude []string) error {
-	empty, err := c.MissingOrEmpty(to)
-	if err != nil {
-		return err
-	}
-	if !empty {
-		return fmt.Errorf("remote directory %s on %s is not empty", to, c.job)
-	}
-
-	session, err := c.sshc.NewSession()
-	if err != nil {
-		return err
-	}
-	defer session.Close()
-
-	stdin, err := session.StdinPipe()
-	if err != nil {
-		return err
-	}
-	defer stdin.Close()
-
-	args := []string{
-		"-cz",
-		"--exclude=.spread-reuse.*",
-	}
-	for _, pattern := range exclude {
-		args = append(args, "--exclude="+pattern)
-	}
-	args = append(args, include...)
-
-	var stderr bytes.Buffer
-
-	cmd := exec.Command("tar", args...)
-	cmd.Dir = from
-	cmd.Stdout = stdin
-	cmd.Stderr = &stderr
-	err = cmd.Start()
-	if err != nil {
-		return fmt.Errorf("cannot start local tar command: %v", err)
-	}
-
-	errch := make(chan error, 1)
-	go func() {
-		errch <- cmd.Wait()
-		stdin.Close()
-	}()
-
-	var stdout safeBuffer
-	session.Stdout = &stdout
-	rcmd := fmt.Sprintf(`%s/bin/bash -c "mkdir -p '%s' && cd '%s' && /bin/tar -xz 2>&1"`, c.sudo(), to, to)
-	err = c.runCommand(session, rcmd, &stdout, nil)
-	if err != nil {
-		return outputErr(stdout.Bytes(), err)
-	}
-
-	if err := <-errch; err != nil {
-		return fmt.Errorf("local tar command returned error: %v", outputErr(stderr.Bytes(), err))
-	}
-	return nil
 }
 
 func (c *Client) SendTar(tar io.Reader, unpackDir string) error {
@@ -730,7 +582,6 @@ func (c *Client) runCommand(session *ssh.Session, cmd string, stdout, stderr io.
 			}
 		}
 	}
-	panic("unreachable")
 }
 
 func tail(output []byte) []byte {
