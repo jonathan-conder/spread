@@ -161,7 +161,7 @@ func (p *lxdProvider) Allocate(ctx context.Context, system *System) (Server, err
 		}
 	}
 
-	err = p.tuneSSH(name)
+	err = p.tuneSSH(name, system)
 	if err != nil {
 		s.Discard(ctx)
 		return nil, err
@@ -492,8 +492,18 @@ func (p *lxdProvider) serverJSON(name string) (*lxdServerJSON, error) {
 	return nil, &lxdNoServerError{name}
 }
 
-func (p *lxdProvider) tuneSSH(name string) error {
+func (p *lxdProvider) tuneSSH(name string, system *System) error {
+	username := system.Username
+	password := system.Password
+	if username == "" {
+		username = "root"
+	}
+	if password == "" {
+		password = p.options.Password
+	}
+
 	cmds := [][]string{
+		{"cloud-init", "status", "--wait"},
 		// Attempt to enable root login with a password through SSH, which is
 		// achieved in a different manner depending on the version of sshd in
 		// the system. Older versions of ssh used a single file.
@@ -502,7 +512,7 @@ func (p *lxdProvider) tuneSSH(name string) error {
 		// place the configuration in a 00-* file because the first obtained value
 		// will be used. See sshd_config(5) for details.
 		{"/bin/bash", "-c", `if [ -d /etc/ssh/sshd_config.d ]; then echo -e "PermitRootLogin yes\nPasswordAuthentication yes" > /etc/ssh/sshd_config.d/00-spread.conf; fi`},
-		{"/bin/bash", "-c", fmt.Sprintf("echo root:'%s' | chpasswd", p.options.Password)},
+		{"/bin/bash", "-c", `chpasswd <<<"$1:$2"`, "bash", username, password},
 		{"killall", "-HUP", "sshd"},
 	}
 	for _, args := range cmds {
