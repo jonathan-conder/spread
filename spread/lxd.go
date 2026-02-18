@@ -67,7 +67,7 @@ func (s *lxdServer) ReuseData() interface{} {
 func (s *lxdServer) Discard(ctx context.Context) error {
 	output, err := exec.Command("lxc", "delete", "--force", s.d.Name).CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("cannot discard lxd container: %v", outputErr(output, err))
+		return fmt.Errorf("cannot discard lxd instance: %v", outputErr(output, err))
 	}
 	return nil
 }
@@ -125,7 +125,7 @@ func (p *lxdProvider) Allocate(ctx context.Context, system *System) (Server, err
 		if bytes.Contains(output, []byte("error: not found")) {
 			err = fmt.Errorf("%s not found", lxdimage)
 		}
-		return nil, &FatalError{fmt.Errorf("cannot launch lxd container: %v", err)}
+		return nil, &FatalError{fmt.Errorf("cannot launch lxd instance: %v", err)}
 	}
 
 	s := &lxdServer{
@@ -136,7 +136,7 @@ func (p *lxdProvider) Allocate(ctx context.Context, system *System) (Server, err
 		system: system,
 	}
 
-	printf("Waiting for lxd container %s to have an address...", name)
+	printf("Waiting for lxd instance %s to have an address...", name)
 	// It takes over 1 minute to allocate an IP address in a GitHub self-hosted
 	// runner sometimes. Hence, set it equal to the qemu's backend timeout.
 	timeout := time.After(5 * time.Minute)
@@ -518,7 +518,7 @@ func (p *lxdProvider) tuneSSH(name string, system *System) error {
 	for _, args := range cmds {
 		output, err := exec.Command("lxc", append([]string{"exec", name, "--"}, args...)...).CombinedOutput()
 		if err != nil && args[0] != "killall" {
-			return fmt.Errorf("cannot prepare sshd in lxd container %q: %v", name, outputErr(output, err))
+			return fmt.Errorf("cannot prepare sshd in lxd instance %q: %v", name, outputErr(output, err))
 		}
 	}
 	return nil
@@ -534,7 +534,7 @@ func lxdListImpl(name string) ([]byte, error) {
 	output, err := cmd.Output()
 	if err != nil {
 		err = outputErr(stderr.Bytes(), err)
-		return nil, fmt.Errorf("cannot list lxd container: %w", err)
+		return nil, fmt.Errorf("cannot list lxd instance: %w", err)
 	}
 
 	return output, nil
