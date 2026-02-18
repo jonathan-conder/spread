@@ -123,6 +123,8 @@ type System struct {
 	Kernel   string
 	Username string
 	Password string
+	Sudo     bool         `yaml:"-"`
+	NoSudo   InvertedBool `yaml:"sudo"`
 	Workers  int
 
 	// Only for Linode and Google so far.
@@ -168,8 +170,23 @@ func (system *System) UnmarshalYAML(u func(interface{}) error) error {
 		if sys.Image == "" {
 			sys.Image = name
 		}
+		sys.Sudo = !bool(sys.NoSudo)
 		*system = System(sys)
 	}
+	return nil
+}
+
+type InvertedBool bool
+
+func (b InvertedBool) MarshalYAML() (interface{}, error) {
+	return !b, nil
+}
+
+func (b *InvertedBool) UnmarshalYAML(u func(interface{}) error) error {
+	if err := u((*bool)(b)); err != nil {
+		return err
+	}
+	*b = !*b
 	return nil
 }
 

@@ -162,6 +162,8 @@ func (r *Reuse) Add(server Server, password string) error {
 		Name:     system.Name,
 		Username: system.Username,
 		Password: system.Password,
+		Sudo:     system.Sudo,
+		NoSudo:   system.NoSudo,
 		Address:  server.Address(),
 		Data:     server.ReuseData(),
 	}
@@ -242,6 +244,8 @@ type ReuseSystem struct {
 	Name     string `yaml:"-"`
 	Username string `yaml:",omitempty"`
 	Password string
+	Sudo     bool         `yaml:"-"`
+	NoSudo   InvertedBool `yaml:"sudo,omitempty"`
 	Address  string
 	Data     interface{} `yaml:",omitempty"`
 }
@@ -254,6 +258,7 @@ func (rsys *ReuseSystem) UnmarshalYAML(u func(interface{}) error) error {
 	}
 	for name, sys := range def {
 		sys.Name = name
+		sys.Sudo = !bool(sys.NoSudo)
 		*rsys = ReuseSystem(sys)
 	}
 	return nil

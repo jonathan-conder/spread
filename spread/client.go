@@ -31,11 +31,12 @@ type Client struct {
 	addr   string
 	job    string
 
+	useSudo     bool
 	warnTimeout time.Duration
 	killTimeout time.Duration
 }
 
-func Dial(server Server, username, password string) (*Client, error) {
+func Dial(server Server, username, password string, useSudo bool) (*Client, error) {
 	config := &ssh.ClientConfig{
 		User:            username,
 		Auth:            []ssh.AuthMethod{ssh.Password(password)},
@@ -51,10 +52,11 @@ func Dial(server Server, username, password string) (*Client, error) {
 		return nil, fmt.Errorf("cannot connect to %s: %v", server, err)
 	}
 	client := &Client{
-		server: server,
-		sshc:   sshc,
-		config: config,
-		addr:   addr,
+		server:  server,
+		sshc:    sshc,
+		config:  config,
+		addr:    addr,
+		useSudo: useSudo,
 	}
 	client.SetWarnTimeout(0)
 	client.SetKillTimeout(0)
@@ -230,7 +232,11 @@ func (c *Client) run(script string, dir string, env *Environment, mode outputMod
 		if err != nil {
 			return nil, err
 		}
-		c.Run("reboot", "", nil)
+		reboot := "reboot"
+		if c.config.User != "root" && !c.useSudo {
+			reboot = "sudo reboot"
+		}
+		c.Run(reboot, "", nil)
 
 		if err := c.dialOnReboot(bootID); err != nil {
 			return nil, err
@@ -426,7 +432,7 @@ func (c *Client) runPart(script string, dir string, env *Environment, mode outpu
 }
 
 func (c *Client) sudo() string {
-	if c.config.User == "root" {
+	if c.config.User == "root" || !c.useSudo {
 		return ""
 	}
 	return "sudo -i "
@@ -896,7 +902,7 @@ func waitServerUp(ctx context.Context, server Server, username, password string)
 
 	for {
 		debugf("Waiting until %s is listening...", server)
-		client, err := Dial(server, username, password)
+		client, err := Dial(server, username, password, true)
 		if err == nil {
 			client.Close()
 			break

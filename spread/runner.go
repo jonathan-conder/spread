@@ -929,7 +929,7 @@ Allocate:
 Dial:
 	for {
 		lerr := err
-		client, err = Dial(server, username, password)
+		client, err = Dial(server, username, password, system.Sudo)
 		if err == nil {
 			break
 		}
@@ -1003,7 +1003,7 @@ func (r *Runner) reuseServer(backend *Backend, system *System) *Client {
 		if username == "" {
 			username = "root"
 		}
-		client, err := Dial(server, username, password)
+		client, err := Dial(server, username, password, rsystem.Sudo)
 		if err != nil {
 			if r.options.Reuse {
 				printf("Cannot reuse %s at %s: %v", system, rsystem.Address, err)
