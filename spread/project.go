@@ -599,10 +599,16 @@ func Load(path string) (*Project, error) {
 			if err := checkEnv(system, &system.Environment); err != nil {
 				return nil, err
 			}
+			if err := checkVariants(system, system.Variants); err != nil {
+				return nil, err
+			}
 		}
 		sort.Strings(backend.Variants)
 
 		if err := checkEnv(backend, &backend.Environment); err != nil {
+			return nil, err
+		}
+		if err := checkVariants(backend, backend.Variants); err != nil {
 			return nil, err
 		}
 		if err = checkSystems(backend, backend.systemNames()); err != nil {
@@ -650,6 +656,9 @@ func Load(path string) (*Project, error) {
 		}
 
 		if err := checkEnv(suite, &suite.Environment); err != nil {
+			return nil, err
+		}
+		if err := checkVariants(suite, suite.Variants); err != nil {
 			return nil, err
 		}
 		if err := checkSystems(suite, suite.Systems); err != nil {
@@ -707,6 +716,9 @@ func Load(path string) (*Project, error) {
 			if err := checkEnv(task, &task.Environment); err != nil {
 				return nil, err
 			}
+			if err := checkVariants(task, task.Variants); err != nil {
+				return nil, err
+			}
 			if err := checkSystems(task, task.Systems); err != nil {
 				return nil, err
 			}
@@ -758,6 +770,15 @@ func checkEnv(context fmt.Stringer, env **Environment) error {
 		*env = NewEnvironment()
 	} else if (*env).err != nil {
 		return fmt.Errorf("invalid %s environment: %s", context, (*env).err)
+	}
+	return nil
+}
+
+func checkVariants(context fmt.Stringer, variants []string) error {
+	for _, k := range variants {
+		if !varkey.MatchString(k) {
+			return fmt.Errorf("invalid %s variant: %s", context, k)
+		}
 	}
 	return nil
 }
@@ -1132,6 +1153,7 @@ var (
 	varname = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*(?:/[a-zA-Z0-9_]+(?:,[a-zA-Z0-9_]+)*)?$`)
 	varcmd  = regexp.MustCompile(`\$\(HOST:.+?\)`)
 	varref  = regexp.MustCompile(`\$(?:\(HOST:.+?\)|[a-zA-Z_][a-zA-Z0-9_]*|\{[a-zA-Z_][a-zA-Z0-9_]*\})`)
+	varkey  = regexp.MustCompile(`^[a-zA-Z0-9_]+$`)
 )
 
 func evalslice(context string, values []string, cmdcache map[string]string, hostOnly bool, maps ...envmap) error {
