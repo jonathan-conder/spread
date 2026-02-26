@@ -329,7 +329,7 @@ func (c *Client) runPart(script string, dir string, env *Environment, mode outpu
 	} else {
 		// Prevent any commands attempting to read from stdin to consume
 		// the shell script itself being sent to bash via its stdin.
-		fmt.Fprintf(&buf, "\n(\n%s\n) < /dev/null\n", script)
+		fmt.Fprintf(&buf, "\n(\n%s\n:\n) < /dev/null\n", script)
 	}
 
 	errch := make(chan error, 2)
