@@ -121,11 +121,12 @@ func biosPath(biosName string) (string, error) {
 	return "", fmt.Errorf("cannot find bios path for %q", biosName)
 }
 
-func qemuCmd(system *System, path string, mem, port int) (*exec.Cmd, error) {
+func qemuCmd(ctx context.Context, system *System, path string, mem, port int) (*exec.Cmd, error) {
 	serial := fmt.Sprintf("telnet:127.0.0.1:%d,server,nowait", port+100)
 	monitor := fmt.Sprintf("telnet:127.0.0.1:%d,server,nowait", port+200)
 	fwd := fmt.Sprintf("user,hostfwd=tcp:127.0.0.1:%d-:22", port)
-	cmd := exec.Command("qemu-system-x86_64",
+	cmd := commandContext(ctx,
+		"qemu-system-x86_64",
 		"-enable-kvm",
 		"-snapshot",
 		"-m", strconv.Itoa(mem),
@@ -165,7 +166,7 @@ func (p *qemuProvider) Allocate(ctx context.Context, system *System) (Server, er
 		return nil, &FatalError{fmt.Errorf("cannot find qemu image at %s", path)}
 	}
 
-	cmd, err := qemuCmd(system, path, mem, port)
+	cmd, err := qemuCmd(ctx, system, path, mem, port)
 	if err != nil {
 		return nil, err
 	}

@@ -1,6 +1,7 @@
 package spread
 
 import (
+	"context"
 	"net/http"
 	"time"
 
@@ -30,7 +31,7 @@ func SetWarnTimeout(cli *Client, warnTimeout time.Duration) {
 	cli.warnTimeout = warnTimeout
 }
 
-func FakeSshDial(f func(network, addr string, config *ssh.ClientConfig) (*ssh.Client, error)) (restore func()) {
+func FakeSshDial(f func(ctx context.Context, network, addr string, config *ssh.ClientConfig) (*ssh.Client, error)) (restore func()) {
 	oldSshDial := sshDial
 	sshDial = f
 	return func() {

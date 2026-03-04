@@ -423,7 +423,7 @@ func (s *openstackFindImageSuite) TestOpenStackWaitServerBootSerialTimeout(c *C)
 
 func (s *openstackFindImageSuite) TestOpenStackWaitServerBootSSHHappy(c *C) {
 	count := 0
-	spread.FakeSshDial(func(network, addr string, config *ssh.ClientConfig) (*ssh.Client, error) {
+	spread.FakeSshDial(func(ctx context.Context, network, addr string, config *ssh.ClientConfig) (*ssh.Client, error) {
 		count++
 		switch count {
 		case 1:
@@ -449,7 +449,7 @@ func (s *openstackFindImageSuite) TestOpenStackWaitServerBootSSHHappy(c *C) {
 }
 
 func (s *openstackFindImageSuite) TestOpenStackWaitServerBootSSHTimeout(c *C) {
-	spread.FakeSshDial(func(network, addr string, config *ssh.ClientConfig) (*ssh.Client, error) {
+	spread.FakeSshDial(func(ctx context.Context, network, addr string, config *ssh.ClientConfig) (*ssh.Client, error) {
 		return nil, errors.New("connection error")
 	})
 

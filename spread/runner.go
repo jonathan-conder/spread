@@ -3,10 +3,10 @@ package spread
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -293,7 +293,8 @@ func (r *Runner) prepareContent() (err error) {
 	args = append(args, include...)
 
 	var stderr bytes.Buffer
-	cmd := exec.Command("tar", args...)
+	ctx := r.contentTomb.Context(r.tomb.Context(nil))
+	cmd := commandContext(ctx, "tar", args...)
 	cmd.Dir = r.project.Path
 	cmd.Stderr = &stderr
 
@@ -304,14 +305,6 @@ func (r *Runner) prepareContent() (err error) {
 		if err != nil {
 			return fmt.Errorf("cannot start local tar command: %v", err)
 		}
-
-		go func() {
-			// TODO Kill that when the function quits.
-			select {
-			case <-r.contentTomb.Dying():
-				cmd.Process.Kill()
-			}
-		}()
 
 		err = cmd.Wait()
 		err = outputErr(stderr.Bytes(), err)
@@ -350,7 +343,6 @@ func (r *Runner) prepareContent() (err error) {
 			killTimeout: r.project.KillTimeout.Duration,
 			mode:        traceOutput,
 			extraFiles:  []*os.File{tarr, gzw},
-			stop:        r.contentTomb.Dying(),
 		}
 		gz := gzip.NewWriter(file)
 
@@ -370,7 +362,7 @@ func (r *Runner) prepareContent() (err error) {
 
 		wg.Add(1)
 		go func() {
-			_, _, err := lscript.run()
+			_, _, err := lscript.run(ctx)
 			errch <- err
 
 			// Stop tar and unblock gz.
@@ -389,14 +381,6 @@ func (r *Runner) prepareContent() (err error) {
 			cmd.Process.Kill()
 
 			wg.Done()
-		}()
-
-		go func() {
-			// TODO Kill that when the function quits.
-			select {
-			case <-r.contentTomb.Dying():
-				cmd.Process.Kill()
-			}
 		}()
 
 		wg.Wait()
@@ -822,7 +806,8 @@ func (r *Runner) fetchArtifacts(client *Client, job *Job) error {
 	tarr, tarw := io.Pipe()
 
 	var stderr bytes.Buffer
-	cmd := exec.Command("tar", "xz")
+	ctx := r.contentTomb.Context(r.tomb.Context(nil))
+	cmd := commandContext(ctx, "tar", "xz")
 	cmd.Dir = localDir
 	cmd.Stdin = tarr
 	cmd.Stderr = &stderr
@@ -842,7 +827,7 @@ func (r *Runner) fetchArtifacts(client *Client, job *Job) error {
 }
 
 func (r *Runner) discardServer(server Server) {
-	if err := server.Discard(r.tomb.Context(nil)); err != nil {
+	if err := server.Discard(context.Background()); err != nil {
 		printf("Error discarding %s: %v", server, err)
 	}
 	if err := r.reuse.Remove(server); err != nil {
@@ -929,7 +914,7 @@ Allocate:
 Dial:
 	for {
 		lerr := err
-		client, err = Dial(server, username, password)
+		client, err = Dial(r.tomb.Context(nil), server, username, password)
 		if err == nil {
 			break
 		}
@@ -1003,7 +988,7 @@ func (r *Runner) reuseServer(backend *Backend, system *System) *Client {
 		if username == "" {
 			username = "root"
 		}
-		client, err := Dial(server, username, password)
+		client, err := Dial(r.tomb.Context(nil), server, username, password)
 		if err != nil {
 			if r.options.Reuse {
 				printf("Cannot reuse %s at %s: %v", system, rsystem.Address, err)

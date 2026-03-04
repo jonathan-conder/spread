@@ -1,6 +1,7 @@
 package spread_test
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -16,7 +17,7 @@ type clientSuite struct{}
 var _ = Suite(&clientSuite{})
 
 func (s *clientSuite) TestDialOnReboot(c *C) {
-	restore := spread.FakeSshDial(func(network, addr string, config *ssh.ClientConfig) (*ssh.Client, error) {
+	restore := spread.FakeSshDial(func(ctx context.Context, network, addr string, config *ssh.ClientConfig) (*ssh.Client, error) {
 		time.Sleep(1 * time.Second)
 		return nil, fmt.Errorf("cannot connect")
 	})

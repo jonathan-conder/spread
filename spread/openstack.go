@@ -411,7 +411,7 @@ func (p *openstackProvider) waitServerBootSSH(ctx context.Context, s *openstackS
 		case <-timeout:
 			return fmt.Errorf("cannot ssh to the allocated instance: timeout reached")
 		case <-retry.C:
-			_, err := sshDial("tcp", addr, config)
+			_, err := sshDial(ctx, "tcp", addr, config)
 			if err == nil {
 				debugf("Connection to server %s established", s.d.Name)
 				return nil

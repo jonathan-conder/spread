@@ -22,7 +22,7 @@ import (
 	"syscall"
 )
 
-var sshDial = ssh.Dial
+var sshDial = sshDialContext
 
 type Client struct {
 	server Server
@@ -35,7 +35,7 @@ type Client struct {
 	killTimeout time.Duration
 }
 
-func Dial(server Server, username, password string) (*Client, error) {
+func Dial(ctx context.Context, server Server, username, password string) (*Client, error) {
 	config := &ssh.ClientConfig{
 		User:            username,
 		Auth:            []ssh.AuthMethod{ssh.Password(password)},
@@ -46,7 +46,7 @@ func Dial(server Server, username, password string) (*Client, error) {
 	if !strings.Contains(addr, ":") {
 		addr += ":22"
 	}
-	sshc, err := sshDial("tcp", addr, config)
+	sshc, err := sshDial(ctx, "tcp", addr, config)
 	if err != nil {
 		return nil, fmt.Errorf("cannot connect to %s: %v", server, err)
 	}
@@ -60,6 +60,19 @@ func Dial(server Server, username, password string) (*Client, error) {
 	client.SetKillTimeout(0)
 	client.SetJob("")
 	return client, nil
+}
+
+func sshDialContext(ctx context.Context, network, addr string, config *ssh.ClientConfig) (*ssh.Client, error) {
+	dialer := net.Dialer{Timeout: config.Timeout}
+	conn, err := dialer.DialContext(ctx, network, addr)
+	if err != nil {
+		return nil, err
+	}
+	c, chans, reqs, err := ssh.NewClientConn(conn, addr, config)
+	if err != nil {
+		return nil, err
+	}
+	return ssh.NewClient(c, chans, reqs), nil
 }
 
 func (c *Client) SetJob(job string) {
@@ -509,6 +522,7 @@ func (c *Client) RecvTar(packDir string, include []string, tar io.Writer) error 
 }
 
 const (
+	cancelTimeout      = 5 * time.Second
 	defaultWarnTimeout = 5 * time.Minute
 	defaultKillTimeout = 15 * time.Minute
 	maxTimeout         = 365 * 24 * time.Hour
@@ -614,10 +628,9 @@ type localScript struct {
 	killTimeout time.Duration
 	mode        outputMode
 	extraFiles  []*os.File
-	stop        <-chan struct{}
 }
 
-func (s *localScript) run() (stdout, stderr []byte, err error) {
+func (s *localScript) run(ctx context.Context) (stdout, stderr []byte, err error) {
 	script := strings.TrimSpace(s.script)
 	if len(script) == 0 {
 		return nil, nil, nil
@@ -656,7 +669,7 @@ func (s *localScript) run() (stdout, stderr []byte, err error) {
 	debugf("Running local script:\n-----\n%s\n------", buf.Bytes())
 
 	var outbuf, errbuf safeBuffer
-	cmd := exec.Command("/bin/bash", "-eu", "-")
+	cmd := commandContext(ctx, "/bin/bash", "-eu", "-")
 	cmd.Stdin = &buf
 	cmd.Dir = s.dir
 	cmd.ExtraFiles = s.extraFiles
@@ -710,10 +723,6 @@ Loop:
 	for {
 		select {
 		case err = <-done:
-			break Loop
-		case <-s.stop:
-			buf.Write([]byte("\n<interrupted>"))
-			err = fmt.Errorf("interrupted")
 			break Loop
 		case <-kill:
 			cmd.Process.Kill()
@@ -771,6 +780,15 @@ Loop:
 		return nil, nil, err
 	}
 	return outbuf.Bytes(), errbuf.Bytes(), nil
+}
+
+func commandContext(ctx context.Context, name string, arg ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, name, arg...)
+	cmd.Cancel = func() error {
+		return cmd.Process.Signal(os.Interrupt)
+	}
+	cmd.WaitDelay = cancelTimeout
+	return cmd
 }
 
 func exitStatus(err error) int {
@@ -887,7 +905,7 @@ func waitServerUp(ctx context.Context, server Server, username, password string)
 
 	for {
 		debugf("Waiting until %s is listening...", server)
-		client, err := Dial(server, username, password)
+		client, err := Dial(ctx, server, username, password)
 		if err == nil {
 			client.Close()
 			break

@@ -50,7 +50,7 @@ func (s *adhocServer) ReuseData() interface{} {
 }
 
 func (s *adhocServer) Discard(ctx context.Context) error {
-	_, err := s.p.run(s.p.backend.Discard, s.system, s.address)
+	_, err := s.p.run(ctx, s.p.backend.Discard, s.system, s.address)
 	if err != nil {
 		return err
 	}
@@ -75,7 +75,7 @@ func (p *adhocProvider) Reuse(ctx context.Context, rsystem *ReuseSystem, system 
 }
 
 func (p *adhocProvider) Allocate(ctx context.Context, system *System) (Server, error) {
-	result, err := p.run(p.backend.Allocate, system, "")
+	result, err := p.run(ctx, p.backend.Allocate, system, "")
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +99,7 @@ func (p *adhocProvider) Allocate(ctx context.Context, system *System) (Server, e
 	return s, nil
 }
 
-func (p *adhocProvider) run(script string, system *System, address string) (result map[string]string, err error) {
+func (p *adhocProvider) run(ctx context.Context, script string, system *System, address string) (result map[string]string, err error) {
 	env := NewEnvironment(
 		"SPREAD_BACKEND", p.backend.Name,
 		"SPREAD_SYSTEM", system.Name,
@@ -118,7 +118,7 @@ func (p *adhocProvider) run(script string, system *System, address string) (resu
 		killTimeout: p.backend.KillTimeout.Duration,
 		mode:        traceOutput,
 	}
-	output, _, err := lscript.run()
+	output, _, err := lscript.run(ctx)
 	if err != nil {
 		return nil, err
 	}

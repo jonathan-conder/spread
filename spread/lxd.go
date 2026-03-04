@@ -65,7 +65,7 @@ func (s *lxdServer) ReuseData() interface{} {
 }
 
 func (s *lxdServer) Discard(ctx context.Context) error {
-	output, err := exec.Command("lxc", "delete", "--force", s.d.Name).CombinedOutput()
+	output, err := commandContext(ctx, "lxc", "delete", "--force", s.d.Name).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("cannot discard lxd instance: %v", outputErr(output, err))
 	}
@@ -119,7 +119,7 @@ func (p *lxdProvider) Allocate(ctx context.Context, system *System) (Server, err
 	// workaround LXD issue: https://discuss.linuxcontainers.org/t/lxd-vm-how-to-set-disk-size/7566
 	args = append(args, "-d")
 	args = append(args, "root,size=20GiB")
-	output, err := exec.Command("lxc", args...).CombinedOutput()
+	output, err := commandContext(ctx, "lxc", args...).CombinedOutput()
 	if err != nil {
 		err = outputErr(output, err)
 		if bytes.Contains(output, []byte("error: not found")) {
@@ -161,7 +161,7 @@ func (p *lxdProvider) Allocate(ctx context.Context, system *System) (Server, err
 		}
 	}
 
-	err = p.tuneSSH(name, system)
+	err = p.tuneSSH(ctx, name, system)
 	if err != nil {
 		s.Discard(ctx)
 		return nil, err
@@ -487,7 +487,7 @@ func (p *lxdProvider) serverJSON(name string) (*lxdServerJSON, error) {
 	return nil, &lxdNoServerError{name}
 }
 
-func (p *lxdProvider) tuneSSH(name string, system *System) error {
+func (p *lxdProvider) tuneSSH(ctx context.Context, name string, system *System) error {
 	username := system.Username
 	password := system.Password
 	if username == "" {
@@ -511,7 +511,7 @@ func (p *lxdProvider) tuneSSH(name string, system *System) error {
 		{"killall", "-HUP", "sshd"},
 	}
 	for _, args := range cmds {
-		output, err := exec.Command("lxc", append([]string{"exec", name, "--"}, args...)...).CombinedOutput()
+		output, err := commandContext(ctx, "lxc", append([]string{"exec", name, "--"}, args...)...).CombinedOutput()
 		if err != nil && args[0] != "killall" {
 			return fmt.Errorf("cannot prepare sshd in lxd instance %q: %v", name, outputErr(output, err))
 		}
