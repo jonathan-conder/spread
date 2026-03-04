@@ -31,12 +31,11 @@ type Client struct {
 	addr   string
 	job    string
 
-	useSudo     bool
 	warnTimeout time.Duration
 	killTimeout time.Duration
 }
 
-func Dial(server Server, username, password string, useSudo bool) (*Client, error) {
+func Dial(server Server, username, password string) (*Client, error) {
 	config := &ssh.ClientConfig{
 		User:            username,
 		Auth:            []ssh.AuthMethod{ssh.Password(password)},
@@ -52,11 +51,10 @@ func Dial(server Server, username, password string, useSudo bool) (*Client, erro
 		return nil, fmt.Errorf("cannot connect to %s: %v", server, err)
 	}
 	client := &Client{
-		server:  server,
-		sshc:    sshc,
-		config:  config,
-		addr:    addr,
-		useSudo: useSudo,
+		server: server,
+		sshc:   sshc,
+		config: config,
+		addr:   addr,
 	}
 	client.SetWarnTimeout(0)
 	client.SetKillTimeout(0)
@@ -233,7 +231,7 @@ func (c *Client) run(script string, dir string, env *Environment, mode outputMod
 			return nil, err
 		}
 		reboot := "reboot"
-		if c.config.User != "root" && !c.useSudo {
+		if c.config.User != "root" {
 			reboot = "sudo reboot"
 		}
 		c.Run(reboot, "", nil)
@@ -286,12 +284,6 @@ func (c *Client) runPart(script string, dir string, env *Environment, mode outpu
 	}
 	if dir != "" {
 		buf.WriteString(fmt.Sprintf("cd \"%s\"\n", dir))
-	}
-	if c.sudo() != "" {
-		buf.WriteString("unset SUDO_COMMAND\n")
-		buf.WriteString("unset SUDO_USER\n")
-		buf.WriteString("unset SUDO_UID\n")
-		buf.WriteString("unset SUDO_GID\n")
 	}
 	buf.WriteString(rc(false, "REBOOT() { { set +xu; } 2> /dev/null; [ -z \"$1\" ] && echo '<REBOOT>' || echo \"<REBOOT $1>\"; exit 213; }\n"))
 	buf.WriteString(rc(false, "ERROR() { { set +xu; } 2> /dev/null; [ -z \"$1\" ] && echo '<ERROR>' || echo \"<ERROR $@>\"; exit 213; }\n"))
@@ -358,14 +350,14 @@ func (c *Client) runPart(script string, dir string, env *Environment, mode outpu
 	var cmd string
 	switch mode {
 	case traceOutput, combinedOutput:
-		cmd = c.sudo() + "/bin/bash - 2>&1"
+		cmd = "/bin/bash - 2>&1"
 		session.Stdout = &stdout
 	case splitOutput:
-		cmd = c.sudo() + "/bin/bash -"
+		cmd = "/bin/bash -"
 		session.Stdout = &stdout
 		session.Stderr = &stderr
 	case shellOutput:
-		cmd = fmt.Sprintf("{\nf=$(mktemp)\ntrap 'rm '$f EXIT\ncat > $f <<'SCRIPT_END'\n%s\nSCRIPT_END\n%s/bin/bash $f\n}", buf.String(), c.sudo())
+		cmd = fmt.Sprintf("{\nf=$(mktemp)\ntrap 'rm '$f EXIT\ncat > $f <<'SCRIPT_END'\n%s\nSCRIPT_END\n/bin/bash $f\n}", buf.String())
 		session.Stdout = os.Stdout
 		session.Stderr = os.Stderr
 		w, h, err := term.GetSize(0)
@@ -431,13 +423,6 @@ func (c *Client) runPart(script string, dir string, env *Environment, mode outpu
 	return output, nil
 }
 
-func (c *Client) sudo() string {
-	if c.config.User == "root" || !c.useSudo {
-		return ""
-	}
-	return "sudo -i "
-}
-
 func getenv(name, defaultValue string) string {
 	if value := os.Getenv(name); value != "" {
 		return value
@@ -485,7 +470,7 @@ func (c *Client) SendTar(tar io.Reader, unpackDir string) error {
 	var stdout safeBuffer
 	session.Stdin = tar
 	session.Stdout = &stdout
-	cmd := fmt.Sprintf(`%s/bin/bash -c "mkdir -p '%s' && cd '%s' && /bin/tar xz 2>&1"`, c.sudo(), unpackDir, unpackDir)
+	cmd := fmt.Sprintf(`/bin/bash -c "mkdir -p '%s' && cd '%s' && /bin/tar xz 2>&1"`, unpackDir, unpackDir)
 	err = c.runCommand(session, cmd, &stdout, nil)
 	if err != nil {
 		return outputErr(stdout.Bytes(), err)
@@ -515,7 +500,7 @@ func (c *Client) RecvTar(packDir string, include []string, tar io.Writer) error 
 	var stderr safeBuffer
 	session.Stdout = tar
 	session.Stderr = &stderr
-	cmd := fmt.Sprintf(`%s/bin/tar -C %q -cz --sort=name --ignore-failed-read -- %s`, c.sudo(), packDir, strings.Join(args, " "))
+	cmd := fmt.Sprintf(`/bin/tar -C %q -cz --sort=name --ignore-failed-read -- %s`, packDir, strings.Join(args, " "))
 	err = c.runCommand(session, cmd, nil, &stderr)
 	if err != nil {
 		return outputErr(stderr.Bytes(), err)
@@ -902,7 +887,7 @@ func waitServerUp(ctx context.Context, server Server, username, password string)
 
 	for {
 		debugf("Waiting until %s is listening...", server)
-		client, err := Dial(server, username, password, true)
+		client, err := Dial(server, username, password)
 		if err == nil {
 			client.Close()
 			break
