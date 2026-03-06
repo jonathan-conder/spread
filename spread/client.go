@@ -25,6 +25,7 @@ import (
 var sshDial = sshDialContext
 
 type Client struct {
+	ctx    context.Context
 	server Server
 	sshc   *ssh.Client
 	config *ssh.ClientConfig
@@ -51,6 +52,7 @@ func Dial(ctx context.Context, server Server, username, password string) (*Clien
 		return nil, fmt.Errorf("cannot connect to %s: %v", server, err)
 	}
 	client := &Client{
+		ctx:    ctx,
 		server: server,
 		sshc:   sshc,
 		config: config,
@@ -543,14 +545,29 @@ func (c *Client) runCommand(session *ssh.Session, cmd string, stdout, stderr io.
 
 	var lastOut, lastErr int
 
-	kill := time.After(c.killTimeout)
+	interrupt := c.ctx.Done()
+	kill := time.NewTimer(c.killTimeout)
 	warn := time.NewTicker(c.warnTimeout)
 	defer warn.Stop()
 	for {
 		select {
 		case err := <-done:
 			return err
-		case <-kill:
+		case <-interrupt:
+			interrupt = nil
+			if err := session.Signal(ssh.SIGINT); err != nil {
+				kill.Reset(0)
+			} else {
+				kill.Reset(cancelTimeout)
+			}
+			out := stdout
+			if out == nil {
+				out = stderr
+			}
+			if out != nil {
+				out.Write([]byte("\n<interrupted>"))
+			}
+		case <-kill.C:
 			session.Signal(ssh.SIGKILL)
 			out := stdout
 			if out == nil {
